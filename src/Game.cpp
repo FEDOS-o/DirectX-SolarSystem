@@ -1,5 +1,6 @@
 #include "Game.h"
 #include "OrbitalCameraGameComponent.h"
+#include "FirstPersonCameraGameComponent.h"
 #include "DisplayWin32.h"
 #include "InputDevice.h"
 
@@ -10,7 +11,9 @@ Game::Game(LPCWSTR applicationName, HINSTANCE hInstance, LONG screenWidth, LONG 
     ScreenResized(false),
     Display(nullptr),
     Input(nullptr),
-    Camera(nullptr),
+    isUsingOrbitalCamera(true),
+    FirstPersonCamera(nullptr),
+    OrbitalCamera(nullptr),
     DepthStencilBuffer(nullptr),
     DepthStencilView(nullptr),
     DepthStencilState(nullptr)
@@ -58,7 +61,9 @@ Game::Game(LPCWSTR applicationName, HINSTANCE hInstance, LONG screenWidth, LONG 
 
     Device->QueryInterface(__uuidof(ID3D11Debug), (void**)&DebugAnnotation);
 
-    Camera = new OrbitalCameraGameComponent(this, Vector3(0, 0, 0), 15.0f);
+    OrbitalCamera = new OrbitalCameraGameComponent(this, Vector3(0, 0, 0), 15.0f);
+    FirstPersonCamera = new FirstPersonCameraGameComponent(this, Vector3(0, 5, 15));
+    Camera = OrbitalCamera;
 
     PrevTime = std::chrono::steady_clock::now();
     StartTime = PrevTime;
@@ -166,7 +171,8 @@ HRESULT Game::Initialize() {
         return res;
     }
 
-    Camera->Initialize();
+    OrbitalCamera->Initialize();
+    FirstPersonCamera->Initialize();
 
     for (auto* component : components) {
         component->Initialize();
@@ -182,6 +188,18 @@ void Game::Update() {
     PrevTime = currentTime;
 
     TotalTime += deltaTime;
+
+    static bool cWasPressed = false;
+    if (Input && Input->IsKeyDown(Keys::C)) {
+        cWasPressed = false;
+        if (!cWasPressed) {
+            SwitchCamera();
+            cWasPressed = true;
+        }
+    } else {
+        cWasPressed = false;
+    }
+
 
     Camera->Update(deltaTime);
 
@@ -287,10 +305,15 @@ void Game::Exit() {
 }
 
 void Game::DestroyResources() {
-    if (Camera) {
-        Camera->DestroyResources();
-        delete Camera;
-        Camera = nullptr;
+    if (OrbitalCamera) {
+        OrbitalCamera->DestroyResources();
+        delete OrbitalCamera;
+        OrbitalCamera = nullptr;
+    }
+    if (FirstPersonCamera) {
+        FirstPersonCamera->DestroyResources();
+        delete FirstPersonCamera;
+        FirstPersonCamera = nullptr;
     }
 
     for (auto* component : components) {
@@ -370,5 +393,21 @@ void Game::Run() {
         Draw();
 
         EndFrame();
+    }
+}
+
+void Game::SwitchCamera() {
+    isUsingOrbitalCamera = !isUsingOrbitalCamera;
+    if (isUsingOrbitalCamera) {
+        Vector3 fpsPos = FirstPersonCamera->GetPosition();
+        Vector3 fpsForward = FirstPersonCamera->GetForward();
+        OrbitalCamera->SetTarget(fpsPos);
+        OrbitalCamera->ResetCamera();
+        Camera = OrbitalCamera;
+    } else {
+        Vector3 orbitalPos = Vector3(0, 5, 15); 
+        FirstPersonCamera->SetPosition(orbitalPos);
+        FirstPersonCamera->ResetCamera();
+        Camera = FirstPersonCamera;
     }
 }

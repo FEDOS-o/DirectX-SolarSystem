@@ -15,12 +15,15 @@
 #include "GameComponent.h"
 #include "InputDevice.h"
 
+
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "dxguid.lib")
 
 class OrbitalCameraGameComponent;
+class FirstPersonCameraGameComponent;
+class Camera;
 
 class Game {
 private:
@@ -41,13 +44,18 @@ private:
     std::chrono::time_point<std::chrono::steady_clock> StartTime;
  
 
+    bool isUsingOrbitalCamera;
     bool ScreenResized;
 
 public:
 
     float TotalTime;
 
-    OrbitalCameraGameComponent* Camera;
+    OrbitalCameraGameComponent* OrbitalCamera;
+    FirstPersonCameraGameComponent* FirstPersonCamera;
+    Camera* Camera;
+
+
     ID3D11RenderTargetView* RenderView;
     Microsoft::WRL::ComPtr<ID3D11Device> Device;
     ID3D11DeviceContext* Context;
@@ -75,4 +83,5 @@ public:
     void Exit();
     void DestroyResources();
     void Run();
+    void SwitchCamera();
 };

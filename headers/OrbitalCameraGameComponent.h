@@ -1,5 +1,5 @@
 #pragma once
-#include "GameComponent.h"
+#include "Camera.h"
 #include "InputDevice.h"
 #include <SimpleMath.h>
 #include <algorithm>
@@ -7,7 +7,7 @@
 using namespace DirectX::SimpleMath;
 using namespace DirectX;
 
-class OrbitalCameraGameComponent : public GameComponent {
+class OrbitalCameraGameComponent : public Camera {
 private:
     Vector3 target;
     float distance;
@@ -19,9 +19,6 @@ private:
     float maxPitch;
     float rotationSpeed;
     float zoomSpeed;
-    Matrix viewMatrix;
-    Matrix projectionMatrix;
-    bool isPerspective;
     DelegateHandle mouseHandle;
     bool pPressed;
     bool homePressed;
@@ -29,9 +26,9 @@ private:
 public:
     OrbitalCameraGameComponent(Game* game, const Vector3& target = Vector3(0, 0, 0),
         float distance = 15.0f, float yaw = 0.0f, float pitch = 0.5f) :
-        GameComponent(game), target(target), distance(distance), yaw(yaw), pitch(pitch),
+        Camera(game), target(target), distance(distance), yaw(yaw), pitch(pitch),
         minDistance(3.0f), maxDistance(80.0f), minPitch(-1.4f), maxPitch(1.4f),
-        rotationSpeed(0.005f), zoomSpeed(2.0f), isPerspective(true),
+        rotationSpeed(0.005f), zoomSpeed(2.0f),
         pPressed(false), homePressed(false) {
         UpdateCamera();
     }
@@ -85,7 +82,7 @@ public:
         }
     }
 
-    void UpdateCamera() {
+    void UpdateCamera() override {
         float x = distance * cos(pitch) * sin(yaw);
         float y = distance * sin(pitch);
         float z = distance * cos(pitch) * cos(yaw);
@@ -93,7 +90,7 @@ public:
         UpdateProjection();
     }
 
-    void UpdateProjection() {
+    void UpdateProjection() override {
         float aspect = 800.0f / 800.0f;
         if (isPerspective) {
             projectionMatrix = Matrix::CreatePerspectiveFieldOfView(XM_PIDIV4, aspect, 0.5f, 100.0f);
@@ -104,7 +101,7 @@ public:
         }
     }
 
-    void ResetCamera() {
+    void ResetCamera() override {
         target = Vector3(0, 0, 0);
         distance = 15.0f;
         yaw = 0.0f;
@@ -117,9 +114,19 @@ public:
         UpdateCamera();
     }
 
-    Matrix GetViewMatrix() const { return viewMatrix; }
-    Matrix GetProjectionMatrix() const { return projectionMatrix; }
-    bool IsPerspective() const { return isPerspective; }
+    Vector3 GetPosition() const override {
+        float x = distance * cos(pitch) * sin(yaw);
+        float y = distance * sin(pitch);
+        float z = distance * cos(pitch) * cos(yaw);
+        return target + Vector3(x, y, z);
+    }
+
+    Vector3 GetForward() const override {
+        Vector3 pos = GetPosition();
+        pos = (target - pos);
+        pos.Normalize();
+        return pos;
+    }
 
     ~OrbitalCameraGameComponent() {
         if (game && game->Input) {
