@@ -19,30 +19,29 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="headers\BackgroundGameComponent.h" />
-    <ClInclude Include="headers\BallGameComponent.h" />
     <ClInclude Include="headers\CelestialBodyGameComponent.h" />
+    <ClInclude Include="headers\Core.h" />
     <ClInclude Include="headers\Delegates.h" />
     <ClInclude Include="headers\DisplayWin32.h" />
     <ClInclude Include="headers\Game.h" />
     <ClInclude Include="headers\GameComponent.h" />
     <ClInclude Include="headers\InputDevice.h" />
     <ClInclude Include="headers\Keys.h" />
-    <ClInclude Include="headers\PaddleGameComponent.h" />
+    <ClInclude Include="headers\OrbitalCameraGameComponent.h" />
     <ClInclude Include="headers\Rect.h" />
-    <ClInclude Include="headers\RectRender.h" />
-    <ClInclude Include="headers\RotatingTriangleGameComponent.h" />
-    <ClInclude Include="headers\TriangleGameComponent.h" />
-    <ClInclude Include="headers\WallGameComponent.h" />
+    <ClInclude Include="headers\RectRenderer.h" />
+    <ClInclude Include="headers\SphereRenderer.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Delegates.cpp" />
     <ClCompile Include="src\DisplayWin32.cpp" />
+    <ClCompile Include="src\Game.cpp" />
     <ClCompile Include="src\InputDevice.cpp" />
     <ClCompile Include="src\MySuper3DApp.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
@@ -131,6 +130,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(ProjectDir)headers</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

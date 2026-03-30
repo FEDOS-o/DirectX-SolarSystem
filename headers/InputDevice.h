@@ -35,7 +35,7 @@ public:
 	InputDevice(Game* inGame);
 	~InputDevice();
 
-
+	void ResetWheelDelta() { MouseWheelDelta = 0; }
 	void AddPressedKey(Keys key);
 	void RemovePressedKey(Keys key);
 	bool IsKeyDown(Keys key);
