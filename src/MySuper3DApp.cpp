@@ -1,11 +1,15 @@
 #include "Game.h"
 #include "CelestialBodyGameComponent.h"
 #include "OrbitalCameraGameComponent.h"
+#include "InfiniteGridGameComponent.h"
 
 int main() {
     HINSTANCE hInstance = GetModuleHandle(nullptr);
 
     Game game(L"Solar System", hInstance, 800, 800);
+
+    InfiniteGridGameComponent* grid = new InfiniteGridGameComponent(&game);
+    game.components.push_back(grid);
 
     CelestialBodyGameComponent* sun = new CelestialBodyGameComponent(
         &game, nullptr,

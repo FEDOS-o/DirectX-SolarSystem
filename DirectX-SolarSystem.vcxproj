@@ -28,6 +28,7 @@
     <ClInclude Include="headers\FirstPersonCameraGameComponent.h" />
     <ClInclude Include="headers\Game.h" />
     <ClInclude Include="headers\GameComponent.h" />
+    <ClInclude Include="headers\InfiniteGridGameComponent.h" />
     <ClInclude Include="headers\InputDevice.h" />
     <ClInclude Include="headers\Keys.h" />
     <ClInclude Include="headers\OrbitalCameraGameComponent.h" />
