@@ -1,8 +1,6 @@
 #pragma once
 #include "GameComponent.h"
 #include "Camera.h"
-#include "OrbitalCameraGameComponent.h"
-#include "FirstPersonCameraGameComponent.h"
 #include <SimpleMath.h>
 #include <vector>
 
@@ -22,18 +20,19 @@ private:
     ID3D11PixelShader* pixelShader;
     ID3D11Buffer* constantBuffer;
 
-    float spacing;
-    float baseFadeDistance;
-    int currentGridSize;
+    float baseSpacing;
+    int baseVisibleLines;
     UINT indexCount;
     bool initialized;
 
+    Vector3 lastCameraPos;
+    float lastCameraHeight;
+
 public:
-    InfiniteGridGameComponent(Game* game, float spacing = 1.0f, float baseFadeDistance = 20.0f)
+    InfiniteGridGameComponent(Game* game, float baseSpacing = 1.0f, int baseVisibleLines = 100)
         : GameComponent(game)
-        , spacing(spacing)
-        , baseFadeDistance(baseFadeDistance)
-        , currentGridSize(200)
+        , baseSpacing(baseSpacing)
+        , baseVisibleLines(baseVisibleLines)
         , vertexBuffer(nullptr)
         , indexBuffer(nullptr)
         , inputLayout(nullptr)
@@ -42,15 +41,17 @@ public:
         , constantBuffer(nullptr)
         , indexCount(0)
         , initialized(false)
+        , lastCameraPos(0, 0, 0)
+        , lastCameraHeight(0)
     {
     }
 
     void Initialize() override {
         if (initialized) return;
 
-        CreateGridGeometry();
         CreateShaders();
         CreateConstantBuffer();
+        BuildGrid();
 
         initialized = true;
     }
@@ -58,25 +59,16 @@ public:
     void Update(float deltaTime) override {
         if (!game || !game->Camera) return;
 
-        int newGridSize = 200;
+        Vector3 cameraPos = game->Camera->GetPosition();
 
-        OrbitalCameraGameComponent* orbitalCam = dynamic_cast<OrbitalCameraGameComponent*>(game->Camera);
-        if (orbitalCam) {
-            float distToTarget = (orbitalCam->GetPosition() - Vector3(0, 0, 0)).Length();
-            newGridSize = 200 + (int)(distToTarget * 3.0f);
-            if (newGridSize > 800) newGridSize = 800;
-        }
-        else {
-            float height = game->Camera->GetPosition().y;
-            if (height > 10.0f) {
-                newGridSize = 200 + (int)(height * 2.0f);
-                if (newGridSize > 400) newGridSize = 400;
-            }
-        }
+        float dx = abs(cameraPos.x - lastCameraPos.x);
+        float dz = abs(cameraPos.z - lastCameraPos.z);
+        float dh = abs(cameraPos.y - lastCameraHeight);
 
-        if (newGridSize != currentGridSize) {
-            currentGridSize = newGridSize;
-            RebuildGrid(currentGridSize);
+        if (dx > baseSpacing || dz > baseSpacing || dh > 1.0f || !vertexBuffer) {
+            lastCameraPos = cameraPos;
+            lastCameraHeight = cameraPos.y;
+            BuildGrid();
         }
     }
 
@@ -85,42 +77,16 @@ public:
             return;
         }
 
-        Vector3 cameraPos = game->Camera->GetPosition();
-        float currentFade = baseFadeDistance;
-        OrbitalCameraGameComponent* orbitalCam = dynamic_cast<OrbitalCameraGameComponent*>(game->Camera);
-        if (orbitalCam) {
-            float distToTarget = (orbitalCam->GetPosition() - Vector3(0, 0, 0)).Length();
-            currentFade = baseFadeDistance + distToTarget * 2.0f;
-            if (currentFade > 1000.0f) currentFade = 1000.0f;
-        }
-        else {
-            float height = cameraPos.y;
-            if (height > 10.0f) {
-                currentFade = baseFadeDistance + height * 2.0f;
-                if (currentFade > 500.0f) currentFade = 500.0f;
-            }
-        }
-
-        float offsetX = fmodf(cameraPos.x, spacing);
-        float offsetZ = fmodf(cameraPos.z, spacing);
-
-        Matrix translation = Matrix::CreateTranslation(-offsetX, 0, -offsetZ);
-        Matrix wvp = translation * game->Camera->GetViewMatrix() * game->Camera->GetProjectionMatrix();
+        Matrix view = game->Camera->GetViewMatrix();
+        Matrix proj = game->Camera->GetProjectionMatrix();
+        Matrix wvp = Matrix::Identity * view * proj;
 
         struct ConstantBufferData {
             Matrix worldViewProj;
-            Vector3 cameraPosition;
-            float fadeDistance;
-            float spacing;
-            Vector3 padding1;
         };
 
         ConstantBufferData cb;
         cb.worldViewProj = wvp.Transpose();
-        cb.cameraPosition = cameraPos;
-        cb.fadeDistance = currentFade;
-        cb.spacing = spacing;
-        cb.padding1 = Vector3(0, 0, 0);
 
         game->Context->UpdateSubresource(constantBuffer, 0, nullptr, &cb, 0, 0);
 
@@ -148,50 +114,64 @@ public:
     }
 
 private:
-    void RebuildGrid(int gridSize) {
+    void BuildGrid() {
+        if (!game || !game->Camera) return;
+
         if (vertexBuffer) { vertexBuffer->Release(); vertexBuffer = nullptr; }
         if (indexBuffer) { indexBuffer->Release(); indexBuffer = nullptr; }
 
-        CreateGridGeometry();
-    }
-
-    void CreateGridGeometry() {
         std::vector<Vertex> vertices;
         std::vector<UINT> indices;
 
-        float halfSize = currentGridSize * spacing;
-        float start = -halfSize;
-        float end = halfSize;
+        Vector3 cameraPos = game->Camera->GetPosition();
+        float height = cameraPos.y;
 
-        for (int i = -currentGridSize; i <= currentGridSize; i++) {
-            float pos = i * spacing;
+        float spacing = baseSpacing + height * 0.5f;
+        if (spacing < baseSpacing) spacing = baseSpacing;
+
+        int visibleLines = baseVisibleLines;
+
+        float centerX = floor(cameraPos.x / spacing) * spacing;
+        float centerZ = floor(cameraPos.z / spacing) * spacing;
+
+        float halfSize = visibleLines * spacing;
+        float startX = centerX - halfSize;
+        float endX = centerX + halfSize;
+        float startZ = centerZ - halfSize;
+        float endZ = centerZ + halfSize;
+
+        for (int i = -visibleLines; i <= visibleLines; i++) {
+            float posX = centerX + i * spacing;
+            float posZ = centerZ + i * spacing;
 
             bool isMajor = (abs(i) % 5 == 0);
             float brightness = isMajor ? 0.7f : 0.35f;
             Vector4 color = Vector4(brightness, brightness, brightness, 1.0f);
 
-            vertices.push_back({ Vector3(start, 0, pos), color });
-            vertices.push_back({ Vector3(end, 0, pos), color });
+            vertices.push_back({ Vector3(startX, 0, posZ), color });
+            vertices.push_back({ Vector3(endX, 0, posZ), color });
             indices.push_back(vertices.size() - 2);
             indices.push_back(vertices.size() - 1);
 
-            vertices.push_back({ Vector3(pos, 0, start), color });
-            vertices.push_back({ Vector3(pos, 0, end), color });
+            vertices.push_back({ Vector3(posX, 0, startZ), color });
+            vertices.push_back({ Vector3(posX, 0, endZ), color });
             indices.push_back(vertices.size() - 2);
             indices.push_back(vertices.size() - 1);
         }
 
-        vertices.push_back({ Vector3(start, 0, 0), Vector4(1.0f, 0.2f, 0.2f, 1.0f) });
-        vertices.push_back({ Vector3(end, 0, 0), Vector4(1.0f, 0.2f, 0.2f, 1.0f) });
+        vertices.push_back({ Vector3(startX, 0, 0), Vector4(1.0f, 0.2f, 0.2f, 1.0f) });
+        vertices.push_back({ Vector3(endX, 0, 0), Vector4(1.0f, 0.2f, 0.2f, 1.0f) });
         indices.push_back(vertices.size() - 2);
         indices.push_back(vertices.size() - 1);
 
-        vertices.push_back({ Vector3(0, 0, start), Vector4(0.2f, 0.2f, 1.0f, 1.0f) });
-        vertices.push_back({ Vector3(0, 0, end), Vector4(0.2f, 0.2f, 1.0f, 1.0f) });
+        vertices.push_back({ Vector3(0, 0, startZ), Vector4(0.2f, 0.2f, 1.0f, 1.0f) });
+        vertices.push_back({ Vector3(0, 0, endZ), Vector4(0.2f, 0.2f, 1.0f, 1.0f) });
         indices.push_back(vertices.size() - 2);
         indices.push_back(vertices.size() - 1);
 
         indexCount = (UINT)indices.size();
+
+        if (indexCount == 0) return;
 
         D3D11_BUFFER_DESC vertexDesc = {};
         vertexDesc.Usage = D3D11_USAGE_DEFAULT;
@@ -200,10 +180,7 @@ private:
 
         D3D11_SUBRESOURCE_DATA vertexData = { vertices.data() };
         HRESULT hr = game->Device->CreateBuffer(&vertexDesc, &vertexData, &vertexBuffer);
-        if (FAILED(hr)) {
-            OutputDebugStringA("Failed to create vertex buffer for grid\n");
-            return;
-        }
+        if (FAILED(hr)) return;
 
         D3D11_BUFFER_DESC indexDesc = {};
         indexDesc.Usage = D3D11_USAGE_DEFAULT;
@@ -211,21 +188,13 @@ private:
         indexDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
 
         D3D11_SUBRESOURCE_DATA indexData = { indices.data() };
-        hr = game->Device->CreateBuffer(&indexDesc, &indexData, &indexBuffer);
-        if (FAILED(hr)) {
-            OutputDebugStringA("Failed to create index buffer for grid\n");
-            return;
-        }
+        game->Device->CreateBuffer(&indexDesc, &indexData, &indexBuffer);
     }
 
     void CreateShaders() {
         const char* vsCode = R"(
             cbuffer ConstantBuffer : register(b0) {
                 float4x4 worldViewProj;
-                float3 cameraPosition;
-                float fadeDistance;
-                float spacing;
-                float3 padding;
             };
             
             struct VSInput {
@@ -236,18 +205,11 @@ private:
             struct VSOutput {
                 float4 position : SV_POSITION;
                 float4 color : COLOR;
-                float distance : TEXCOORD0;
             };
             
             VSOutput VSMain(VSInput input) {
                 VSOutput output;
-                float4 worldPos = float4(input.position, 1.0f);
-                output.position = mul(worldPos, worldViewProj);
-                
-                float dx = input.position.x - cameraPosition.x;
-                float dz = input.position.z - cameraPosition.z;
-                output.distance = sqrt(dx*dx + dz*dz);
-                
+                output.position = mul(float4(input.position, 1.0f), worldViewProj);
                 output.color = input.color;
                 return output;
             }
@@ -256,14 +218,11 @@ private:
         ID3DBlob* vsBlob = nullptr;
         ID3DBlob* error = nullptr;
 
-        HRESULT hr = D3DCompile(vsCode, strlen(vsCode), nullptr, nullptr, nullptr, "VSMain", "vs_5_0",
-            D3DCOMPILE_DEBUG, 0, &vsBlob, &error);
+        HRESULT hr = D3DCompile(vsCode, strlen(vsCode), nullptr, nullptr, nullptr,
+            "VSMain", "vs_5_0", D3DCOMPILE_DEBUG, 0, &vsBlob, &error);
 
         if (FAILED(hr)) {
-            if (error) {
-                OutputDebugStringA((char*)error->GetBufferPointer());
-                error->Release();
-            }
+            if (error) error->Release();
             return;
         }
 
@@ -271,33 +230,19 @@ private:
             struct VSOutput {
                 float4 position : SV_POSITION;
                 float4 color : COLOR;
-                float distance : TEXCOORD0;
-            };
-            
-            cbuffer ConstantBuffer : register(b0) {
-                float4x4 worldViewProj;
-                float3 cameraPosition;
-                float fadeDistance;
-                float spacing;
-                float3 padding;
             };
             
             float4 PSMain(VSOutput input) : SV_TARGET {
-                float fade = 1.0f - saturate(input.distance / fadeDistance);
-                fade = fade * fade;
-                return float4(input.color.rgb, input.color.a * fade);
+                return input.color;
             }
         )";
 
         ID3DBlob* psBlob = nullptr;
-        hr = D3DCompile(psCode, strlen(psCode), nullptr, nullptr, nullptr, "PSMain", "ps_5_0",
-            D3DCOMPILE_DEBUG, 0, &psBlob, &error);
+        hr = D3DCompile(psCode, strlen(psCode), nullptr, nullptr, nullptr,
+            "PSMain", "ps_5_0", D3DCOMPILE_DEBUG, 0, &psBlob, &error);
 
         if (FAILED(hr)) {
-            if (error) {
-                OutputDebugStringA((char*)error->GetBufferPointer());
-                error->Release();
-            }
+            if (error) error->Release();
             vsBlob->Release();
             return;
         }
@@ -320,20 +265,12 @@ private:
     void CreateConstantBuffer() {
         struct ConstantBufferData {
             Matrix worldViewProj;
-            Vector3 cameraPosition;
-            float fadeDistance;
-            float spacing;
-            Vector3 padding1;
         };
 
         D3D11_BUFFER_DESC desc = {};
         desc.Usage = D3D11_USAGE_DEFAULT;
         desc.ByteWidth = sizeof(ConstantBufferData);
         desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-        HRESULT hr = game->Device->CreateBuffer(&desc, nullptr, &constantBuffer);
-
-        if (FAILED(hr)) {
-            OutputDebugStringA("Failed to create constant buffer for grid\n");
-        }
+        game->Device->CreateBuffer(&desc, nullptr, &constantBuffer);
     }
 };
